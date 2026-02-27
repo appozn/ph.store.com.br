@@ -44,6 +44,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = 'login.html';
     });
 
+    // Salvar Alterações Button
+    const saveGlobalBtn = document.getElementById('saveGlobalBtn');
+    if (saveGlobalBtn) {
+        saveGlobalBtn.addEventListener('click', async () => {
+            try {
+                saveGlobalBtn.disabled = true;
+                saveGlobalBtn.textContent = 'Salvando...';
+
+                // Force a full save of current data
+                await db.save();
+
+                showToast('Alterações salvas e aplicadas globalmente!');
+
+                // Refresh to ensure everything is synced
+                setTimeout(() => {
+                    saveGlobalBtn.disabled = false;
+                    saveGlobalBtn.textContent = 'Salvar alterações';
+                    window.location.reload();
+                }, 800);
+            } catch (err) {
+                console.error("Save Error:", err);
+                showToast('Erro ao salvar alterações.', 'error');
+                saveGlobalBtn.disabled = false;
+                saveGlobalBtn.textContent = 'Salvar alterações';
+            }
+        });
+    }
+
     // Theme Toggle
     document.getElementById('toggleThemeBtn').addEventListener('click', (e) => {
         e.preventDefault();
@@ -355,8 +383,9 @@ function deleteCategory(id) {
     }
 
     if (confirm('Tem certeza que deseja excluir esta categoria?')) {
-        db.deleteCategory(id);
-        showToast('Categoria excluída com sucesso!');
+        db.deleteCategory(id).then(() => {
+            showToast('Categoria excluída com sucesso!');
+        });
     }
 }
 
@@ -396,10 +425,10 @@ function initFormListeners() {
                 }
 
                 if (id) {
-                    db.updateCategory(id, name, finalImageUrl);
+                    await db.updateCategory(id, name, finalImageUrl);
                     showToast('Categoria atualizada!');
                 } else {
-                    const cat = db.addCategory(name, finalImageUrl);
+                    await db.addCategory(name, finalImageUrl);
                     showToast('Categoria criada!');
                 }
 
@@ -466,10 +495,10 @@ function initFormListeners() {
                 };
 
                 if (id) {
-                    db.updateProduct(id, productData);
+                    await db.updateProduct(id, productData);
                     showToast('Produto atualizado!');
                 } else {
-                    db.addProduct(productData);
+                    await db.addProduct(productData);
                     showToast('Produto criado com sucesso!');
                 }
 
@@ -511,7 +540,7 @@ function initFormListeners() {
                     return;
                 }
 
-                db.addOffer({ productId: prodId, promoPrice });
+                await db.addOffer({ productId: prodId, promoPrice });
                 showToast('Oferta ativada!');
 
                 setTimeout(() => {
@@ -702,8 +731,9 @@ function editProduct(id) {
 
 function deleteProduct(id) {
     if (confirm('Tem certeza que deseja excluir este produto?')) {
-        db.deleteProduct(id);
-        showToast('Produto excluído com sucesso!');
+        db.deleteProduct(id).then(() => {
+            showToast('Produto excluído com sucesso!');
+        });
     }
 }
 
@@ -772,8 +802,9 @@ function closeOfferModal() {
 
 function deleteOffer(id) {
     if (confirm('Deseja remover esta oferta?')) {
-        db.deleteOffer(id);
-        showToast('Oferta removida com sucesso!');
+        db.deleteOffer(id).then(() => {
+            showToast('Oferta removida com sucesso!');
+        });
     }
 }
 
