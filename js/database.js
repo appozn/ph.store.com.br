@@ -1,6 +1,29 @@
+/*
+ * =========================================================================
+ *  BANCO DE DADOS GLOBAL COM FIREBASE
+ * =========================================================================
+ * Para que os dados sejam salvos e sincronizados para TODOS os clientes em
+ * tempo real, você precisa colocar as chaves do seu projeto Firebase abaixo.
+ * 
+ * 1. Acesse https://console.firebase.google.com/ e crie um projeto.
+ * 2. Adicione um App Web (</>) e copie as chaves geradas.
+ * 3. No menu à esquerda, vá em "Firestore Database" e crie um banco de dados
+ *    (inicie as regras em modo de teste para facilitar).
+ * 4. Cole as chaves abaixo e salve este arquivo.
+ */
+
+const firebaseConfig = {
+    // 🔥 COLOQUE SUAS CHAVES AQUI 🔥
+    apiKey: "SUA_API_KEY",
+    authDomain: "seu-projeto.firebaseapp.com",
+    projectId: "seu-projeto",
+    storageBucket: "seu-projeto.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
+};
+
 const DB_NAME = 'PHStoreRealDB_v2';
 const STORE_NAME = 'ph_store_data';
-const IMG_STORE = 'ph_store_images';
 
 const defaultData = {
     settings: {
@@ -32,17 +55,20 @@ const defaultData = {
 class Database {
     constructor() {
         this.data = null;
-        this.idb = null;
-        this.channel = new BroadcastChannel('ph_store_sync');
+        this.dbFirestore = null;
+        this.docRef = null;
+        this.unsubscribe = null;
 
+        // Verifica se o Firebase foi preenchido pelo usuário
+        this.isFirebaseConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "SUA_API_KEY" && firebaseConfig.apiKey !== "";
+
+        // Opcional pra manter os tabs sincronizados caso seja local
+        this.channel = new BroadcastChannel('ph_store_sync');
         this.channel.onmessage = (e) => {
-            if (e.data === 'sync' && this.idb) {
-                this.loadFromIDB().then(() => {
-                    this.dispatchUpdate();
-                });
+            if (e.data === 'sync' && !this.isFirebaseConfigured) {
+                this.loadFromLocalMock().then(() => this.dispatchUpdate());
             }
         };
-        this.saveTimeout = null;
     }
 
     dispatchUpdate() {
@@ -52,136 +78,160 @@ class Database {
 
     async init() {
         return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                console.warn("Database init timeout. Falling back to default data.");
-                this.data = JSON.parse(JSON.stringify(defaultData));
-                resolve();
-            }, 5000);
-
-            try {
-                const request = indexedDB.open(DB_NAME, 1);
-
-                request.onupgradeneeded = (e) => {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        db.createObjectStore(STORE_NAME);
+            if (this.isFirebaseConfigured) {
+                // INICIALIZANDO FIREBASE
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(firebaseConfig);
                     }
-                    if (!db.objectStoreNames.contains(IMG_STORE)) {
-                        db.createObjectStore(IMG_STORE);
-                    }
-                };
+                    this.dbFirestore = firebase.firestore();
+                    this.docRef = this.dbFirestore.collection('store_data').doc('main_data');
 
-                request.onsuccess = (e) => {
-                    clearTimeout(timeout);
-                    this.idb = e.target.result;
-                    this.loadFromIDB().then(resolve).catch(err => {
-                        console.error("Error loading data after init:", err);
-                        resolve();
-                    });
-                };
+                    let isFirstLoad = true;
 
-                request.onerror = (e) => {
-                    clearTimeout(timeout);
-                    console.error("IndexedDB open error:", e);
-                    this.data = JSON.parse(JSON.stringify(defaultData));
-                    resolve();
-                };
+                    // Listener em tempo real (Sincronização imediata para todos os clientes)
+                    this.unsubscribe = this.docRef.onSnapshot((docSnap) => {
+                        if (docSnap.exists) {
+                            this.data = docSnap.data();
+                            this.ensureDataIntegrity();
 
-                request.onblocked = () => {
-                    clearTimeout(timeout);
-                    console.warn("IndexedDB blocked. Please close other tabs.");
-                    this.data = JSON.parse(JSON.stringify(defaultData));
-                    resolve();
-                };
-            } catch (err) {
-                clearTimeout(timeout);
-                console.error("Database init exception:", err);
-                this.data = JSON.parse(JSON.stringify(defaultData));
-                resolve();
-            }
-        });
-    }
-
-    async loadFromIDB() {
-        return new Promise((resolve) => {
-            if (!this.idb) {
-                this.data = JSON.parse(JSON.stringify(defaultData));
-                return resolve();
-            }
-
-            try {
-                const tx = this.idb.transaction(STORE_NAME, 'readonly');
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.get('main_data');
-
-                req.onsuccess = async (e) => {
-                    if (e.target.result) {
-                        this.data = e.target.result;
-                        console.log("Data loaded from IDB v2.");
-                    } else {
-                        console.log("IDB v2 empty. Attempting migration...");
-                        // 1. Try migration from v1 (PHStoreRealDB)
-                        const migratedData = await this.tryMigrationFromV1();
-                        if (migratedData) {
-                            this.data = migratedData;
-                            console.log("Data migrated from v1.");
+                            if (isFirstLoad) {
+                                isFirstLoad = false;
+                                console.log("✅ Dados carregados da Nuvem (Firebase).");
+                                resolve();
+                            } else {
+                                this.dispatchUpdate(); // Atualiza a tela em tempo real
+                            }
                         } else {
-                            // 2. Try fallback from localStorage
-                            const backup = localStorage.getItem('ph_store_backup');
-                            if (backup) {
-                                try {
-                                    this.data = JSON.parse(backup);
-                                    console.log("Data recovered from backup.");
-                                } catch (err) {
+                            // Documento não existe ainda. Cria baseado no IndexedDB antigo ou defaultData
+                            console.log("⚠️ Criando banco de dados inicial na nuvem...");
+
+                            this.loadFromIDB_Legacy().then(legacyData => {
+                                if (legacyData) {
+                                    console.log("✅ Migrando dados do banco local antigo para a nuvem...");
+                                    this.data = legacyData;
+                                } else {
                                     this.data = JSON.parse(JSON.stringify(defaultData));
                                 }
-                            } else {
-                                this.data = JSON.parse(JSON.stringify(defaultData));
-                            }
+                                this.ensureDataIntegrity();
+                                this.saveToFirebase().then(() => {
+                                    if (isFirstLoad) {
+                                        isFirstLoad = false;
+                                        resolve();
+                                    }
+                                });
+                            });
                         }
-                        await this.saveToIDB();
+                    }, (error) => {
+                        console.error("❌ Erro de permissão no Firebase. Você definiu as regras de segurança?", error);
+                        console.warn("Dica: Vá no Firestore Database -> Regras (Rules) e coloque: allow read, write: if true;");
+                        this.loadFallbackLocal(resolve);
+                    });
+
+                } catch (err) {
+                    console.error("❌ Erro ao inicializar Firebase:", err);
+                    this.loadFallbackLocal(resolve);
+                }
+            } else {
+                // MODO LOCAL (APENAS PARA NÃO QUEBRAR O SITE, MAS NÃO FICA GLOBAL)
+                console.warn("⚠️ ALERTA: Firebase não detectado. O site funcionará localmente (dados não aparecerão para clientes). Para arrumar, configure as chaves no database.js!");
+                if (window.location.pathname.includes('admin.html')) {
+                    const notice = document.createElement('div');
+                    notice.innerHTML = `<div style="background: #ef4444; color: white; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 8px; font-weight: bold; font-size: 14px;">⚠️ INTEGRAÇÃO DO BANCO GLOBAL OBRIGATÓRIA:<br>Para que os produtos apareçam para os seus clientes, edite o arquivo <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;">js/database.js</code> e insira as chaves (apiKey) do seu projeto Firebase!</div>`;
+                    document.body.prepend(notice);
+                }
+                this.loadFromIDB_Legacy().then(legacyData => {
+                    if (legacyData) {
+                        this.data = legacyData;
+                        this.ensureDataIntegrity();
+                        resolve();
+                    } else {
+                        this.loadFallbackLocal(resolve);
                     }
-
-                    this.ensureDataIntegrity();
-                    resolve();
-                };
-
-                req.onerror = (e) => {
-                    console.error("Error getting main_data:", e);
-                    this.data = JSON.parse(JSON.stringify(defaultData));
-                    resolve();
-                };
-            } catch (err) {
-                console.error("Transaction error in loadFromIDB:", err);
-                this.data = JSON.parse(JSON.stringify(defaultData));
-                resolve();
+                });
             }
         });
     }
 
-    async tryMigrationFromV1() {
+    // ========== INTEGRAÇÃO NUVEM ==========
+    async saveToFirebase() {
+        if (!this.dbFirestore || !this.docRef || !this.data) return;
+        try {
+            await this.docRef.set(this.data);
+            console.log("Sincronizado na nuvem.");
+        } catch (err) {
+            console.error("Erro ao salvar no Firebase:", err);
+        }
+    }
+
+
+    // ========== BACKUP LOCAL / LEGACY MIGRATION ==========
+    loadFallbackLocal(resolve) {
+        this.loadFromLocalMock().then(() => resolve());
+    }
+
+    async loadFromLocalMock() {
         return new Promise((resolve) => {
-            const req = indexedDB.open('PHStoreRealDB', 1);
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('ph_store_data')) {
-                    db.close();
-                    return resolve(null);
+            const backup = localStorage.getItem('ph_store_data_local');
+            if (backup) {
+                try {
+                    this.data = JSON.parse(backup);
+                } catch (err) {
+                    this.data = JSON.parse(JSON.stringify(defaultData));
                 }
-                const tx = db.transaction('ph_store_data', 'readonly');
-                const store = tx.objectStore('ph_store_data');
-                const getReq = store.get('main_data');
-                getReq.onsuccess = (ge) => {
-                    db.close();
-                    resolve(ge.target.result || null);
-                };
-                getReq.onerror = () => {
-                    db.close();
-                    resolve(null);
-                };
-            };
-            req.onerror = () => resolve(null);
+            } else {
+                this.data = JSON.parse(JSON.stringify(defaultData));
+            }
+            this.ensureDataIntegrity();
+            resolve();
         });
+    }
+
+    async saveToLocalMock() {
+        if (!this.data) return;
+        localStorage.setItem('ph_store_data_local', JSON.stringify(this.data));
+    }
+
+    async loadFromIDB_Legacy() {
+        return new Promise((resolve) => {
+            try {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onsuccess = (e) => {
+                    const localDB = e.target.result;
+                    if (!localDB.objectStoreNames.contains(STORE_NAME)) {
+                        localDB.close();
+                        return resolve(null);
+                    }
+                    const tx = localDB.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.get('main_data');
+                    req.onsuccess = (ev) => {
+                        localDB.close();
+                        resolve(ev.target.result || null);
+                    };
+                    req.onerror = () => {
+                        localDB.close();
+                        resolve(null);
+                    }
+                };
+                request.onerror = () => resolve(null);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    }
+
+    // ========== CORE LOGIC ==========
+    save() {
+        if (this.isFirebaseConfigured) {
+            this.saveToFirebase();
+        } else {
+            this.saveToLocalMock().then(() => {
+                try { if (this.channel) this.channel.postMessage('sync'); } catch (e) { }
+                this.dispatchUpdate();
+            });
+        }
+        return true;
     }
 
     ensureDataIntegrity() {
@@ -207,55 +257,13 @@ class Database {
                 password: 'phstore.adm',
                 role: 'ADMIN'
             });
-            this.saveToIDB();
+            this.save();
         } else if (hasAdmin.password === 'phstore.com.br') {
             hasAdmin.password = 'phstore.adm';
-            this.saveToIDB();
+            this.save();
         }
     }
 
-    async saveToIDB() {
-        if (!this.idb || !this.data) return;
-        if (this.saveTimeout) clearTimeout(this.saveTimeout);
-
-        return new Promise((resolve) => {
-            this.saveTimeout = setTimeout(async () => {
-                try {
-                    const tx = this.idb.transaction([STORE_NAME, IMG_STORE], 'readwrite');
-
-                    // Handle Images separately if they are too large
-                    // For now, we keep the structure but optimize the persistence
-                    const store = tx.objectStore(STORE_NAME);
-                    store.put(this.data, 'main_data');
-
-                    tx.oncomplete = () => {
-                        try {
-                            // Backup only metadata to localStorage
-                            const minimal = JSON.parse(JSON.stringify(this.data));
-                            if (minimal.products) minimal.products.forEach(p => p.image = p.image?.length > 500 ? 'IMG' : p.image);
-                            if (minimal.categories) minimal.categories.forEach(c => c.image = c.image?.length > 500 ? 'IMG' : c.image);
-                            localStorage.setItem('ph_store_backup', JSON.stringify(minimal));
-                        } catch (e) { }
-                        resolve();
-                    };
-                    tx.onerror = () => resolve();
-                } catch (err) {
-                    console.error("Save error:", err);
-                    resolve();
-                }
-            }, 50);
-        });
-    }
-
-    save() {
-        this.saveToIDB().then(() => {
-            try {
-                if (this.channel) this.channel.postMessage('sync');
-            } catch (e) { }
-            this.dispatchUpdate();
-        });
-        return true;
-    }
 
     // Settings
     getSettings() { return (this.data && this.data.settings) || defaultData.settings; }
@@ -295,7 +303,7 @@ class Database {
     getProducts() { return (this.data && this.data.products) || []; }
     addProduct(product) {
         if (!this.data) return null;
-        product.id = Date.now().toString();
+        product.id = 'PROD-' + Date.now().toString();
         this.data.products.push(product);
         this.save();
         return product;
@@ -315,7 +323,7 @@ class Database {
     // Offers
     getOffers() { return this.data.offers || []; }
     addOffer(offer) {
-        offer.id = Date.now().toString();
+        offer.id = 'OFFER-' + Date.now().toString();
         offer.active = offer.active !== undefined ? offer.active : true;
         offer.pinned = offer.pinned !== undefined ? offer.pinned : false;
         this.data.offers.push(offer);
@@ -342,7 +350,7 @@ class Database {
         if (exists) return false;
 
         const user = {
-            id: Date.now().toString(),
+            id: 'USER-' + Date.now().toString(),
             name,
             email,
             password,
@@ -355,7 +363,6 @@ class Database {
 
     deleteUser(id) {
         const user = this.getLoggedUser();
-        // Prevent deleting yourself
         if (user && user.id === id) return false;
 
         this.data.users = this.data.users.filter(u => u.id !== id);
@@ -374,7 +381,6 @@ class Database {
                 role: user.role
             }));
 
-            // Broadcast login so other scripts know (not strictly db cross-tab but good)
             window.dispatchEvent(new Event('auth_changed'));
             return user;
         }
