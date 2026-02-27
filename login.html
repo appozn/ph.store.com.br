@@ -78,22 +78,22 @@
             left: -100px;
             width: 400px;
             height: 400px;
-            background: linear-gradient(135deg, rgba(255, 64, 129, 0.1), rgba(255, 64, 129, 0));
+            background: linear-gradient(135deg, rgba(231, 34, 155, 0.1), rgba(231, 34, 155, 0));
             border-radius: 50%;
             filter: blur(40px);
             z-index: 1;
         }
 
-        .blob-2 {
-            position: fixed;
-            bottom: -100px;
-            right: -100px;
-            width: 500px;
-            height: 500px;
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0));
-            border-radius: 50%;
-            filter: blur(40px);
-            z-index: 1;
+        @media (max-width: 576px) {
+            .auth-card {
+                padding: 30px 20px;
+            }
+
+            .home-link {
+                top: 20px;
+                left: 20px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
