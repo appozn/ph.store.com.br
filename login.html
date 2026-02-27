@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PH STORE - Login</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <style>
+        .auth-page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: var(--bg-secondary);
+            padding: 20px;
+        }
+
+        .auth-card {
+            background: var(--card-bg);
+            padding: 50px 40px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-glass);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            border: 1px solid rgba(229, 231, 235, 0.5);
+            position: relative;
+            z-index: 10;
+        }
+
+        .auth-card h1 {
+            margin-bottom: 10px;
+            font-size: 32px;
+            color: var(--text-main);
+        }
+
+        .auth-card p {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
+        .toggle-auth {
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .toggle-auth:hover {
+            text-decoration: underline;
+        }
+
+        .home-link {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            font-weight: 500;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .home-link:hover {
+            color: var(--text-main);
+            transform: translateX(-5px);
+        }
+
+        /* Decorative blobs */
+        .blob-1 {
+            position: fixed;
+            top: -100px;
+            left: -100px;
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, rgba(255, 64, 129, 0.1), rgba(255, 64, 129, 0));
+            border-radius: 50%;
+            filter: blur(40px);
+            z-index: 1;
+        }
+
+        .blob-2 {
+            position: fixed;
+            bottom: -100px;
+            right: -100px;
+            width: 500px;
+            height: 500px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0));
+            border-radius: 50%;
+            filter: blur(40px);
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="blob-1"></div>
+    <div class="blob-2"></div>
+
+    <a href="index.html" class="home-link">← Voltar à Loja</a>
+
+    <div class="auth-page">
+        <!-- LOGIN SECTION -->
+        <div class="auth-card" id="loginSection">
+            <div style="text-align: center; margin-bottom: 25px;">
+                <img src="img/logo.png" alt="Logo" class="glow-pink"
+                    style="max-height: 120px; width: auto; object-fit: contain;" onerror="this.style.display='none'">
+            </div>
+            <h1>Bem-vindo</h1>
+            <p>Faça login para acessar sua conta.</p>
+            <form id="loginForm">
+                <div class="form-group text-left" style="text-align: left;">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="loginEmail" class="form-control" required placeholder="seu@email.com">
+                </div>
+                <div class="form-group text-left" style="text-align: left;">
+                    <label class="form-label">Senha</label>
+                    <input type="password" id="loginPass" class="form-control" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Entrar</button>
+                <div id="loginErrorMsg"
+                    style="color: red; margin-top: 15px; display: none; font-size: 14px; font-weight: 500;">Credenciais
+                    inválidas.</div>
+            </form>
+            <div class="mt-4" style="font-size: 14px;">
+                Ainda não tem conta? <span class="toggle-auth" onclick="toggleView('register')">Criar agora</span>
+            </div>
+        </div>
+
+        <!-- REGISTER SECTION -->
+        <div class="auth-card hidden" id="registerSection">
+            <div style="text-align: center; margin-bottom: 25px;">
+                <img src="img/logo.png" alt="Logo" class="glow-pink"
+                    style="max-height: 120px; width: auto; object-fit: contain;" onerror="this.style.display='none'">
+            </div>
+            <h1>Criar Conta</h1>
+            <p>Junte-se à PH STORE em poucos passos.</p>
+            <form id="registerForm">
+                <div class="form-group text-left" style="text-align: left;">
+                    <label class="form-label">Nome Completo</label>
+                    <input type="text" id="regName" class="form-control" required placeholder="João da Silva">
+                </div>
+                <div class="form-group text-left" style="text-align: left;">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="regEmail" class="form-control" required placeholder="seu@email.com">
+                </div>
+                <div class="form-group text-left" style="text-align: left;">
+                    <label class="form-label">Senha</label>
+                    <input type="password" id="regPass" class="form-control" required placeholder="Mínimo 6 caracteres"
+                        minlength="6">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Cadastrar</button>
+                <div id="regErrorMsg"
+                    style="color: red; margin-top: 15px; display: none; font-size: 14px; font-weight: 500;">Email já
+                    cadastrado.</div>
+            </form>
+            <div class="mt-4" style="font-size: 14px;">
+                Já tem conta? <span class="toggle-auth" onclick="toggleView('login')">Fazer Login</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/database.js"></script>
+    <script>
+        // Redirect if already logged in
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await db.init();
+                const s = db.getSettings();
+                document.querySelectorAll('img[alt="Logo"]').forEach(img => {
+                    img.src = s.logoUrl || 'img/logo.png';
+                });
+
+                const user = db.getLoggedUser();
+                if (user) {
+                    if (user.role === 'ADMIN') window.location.href = 'admin.html';
+                    else window.location.href = 'index.html';
+                }
+            } catch (err) {
+                console.error("Error during login init:", err);
+            }
+        });
+
+        function toggleView(view) {
+            if (view === 'login') {
+                document.getElementById('registerSection').classList.add('hidden');
+                document.getElementById('loginSection').classList.remove('hidden');
+            } else {
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('registerSection').classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const pass = document.getElementById('loginPass').value;
+
+            const user = db.login(email, pass);
+            if (user) {
+                if (user.role === 'ADMIN') window.location.href = 'admin.html';
+                else window.location.href = 'index.html';
+            } else {
+                document.getElementById('loginErrorMsg').style.display = 'block';
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('regName').value;
+            const email = document.getElementById('regEmail').value;
+            const pass = document.getElementById('regPass').value;
+
+            const user = db.registerUser(name, email, pass);
+            if (user) {
+                // Auto login after register
+                db.login(email, pass);
+                window.location.href = 'index.html';
+            } else {
+                document.getElementById('regErrorMsg').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+
+</html>
