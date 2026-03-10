@@ -25,17 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showToast('Erro ao carregar dados do sistema.', 'error');
     }
 
-    // Set initial logo and site name
-    const s = db.getSettings();
-    const logoEl = document.getElementById('adminLogoDisplay');
-    if (logoEl) {
-        if (s.logoUrl) {
-            const finalUrl = s.logoUrl.startsWith('data:image') || s.logoUrl.startsWith('blob:') ? s.logoUrl : s.logoUrl + '?t=' + new Date().getTime();
-            logoEl.innerHTML = `<img src="${finalUrl}" alt="${s.siteName || ''}" style="max-height: 50px; width: auto; object-fit: contain;" onerror="this.style.display='none'; this.parentNode.textContent='${s.siteName || ''}';">`;
-        } else {
-            logoEl.textContent = s.siteName || '';
-        }
-    }
+    renderAdminLogo();
 
     // Logout
     document.getElementById('logoutBtn').addEventListener('click', (e) => {
@@ -113,7 +103,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (imgFileInput) {
         imgFileInput.addEventListener('change', (e) => handleImageUpload(e, 'product'));
     }
+
+    // DB Status Indicator
+    const updateDBStatus = () => {
+        const dot = document.getElementById('dbStatusDot');
+        const text = document.getElementById('dbStatusText');
+        if (dot && text) {
+            if (db.supabase) {
+                dot.style.background = '#4ade80';
+                text.textContent = 'Banco Conectado';
+            } else {
+                dot.style.background = '#f87171';
+                text.textContent = 'Modo Local (Erro Supabase)';
+            }
+        }
+    };
+    updateDBStatus();
+    window.addEventListener('db_updated', () => {
+        updateDBStatus();
+        renderAdminLogo();
+    });
 });
+
+function renderAdminLogo() {
+    const s = db.getSettings();
+    const logoEl = document.getElementById('adminLogoDisplay');
+    if (!logoEl) return;
+
+    if (s.logoUrl) {
+        const finalUrl = s.logoUrl.startsWith('data:image') || s.logoUrl.startsWith('blob:') ? s.logoUrl : s.logoUrl + '?t=' + new Date().getTime();
+        logoEl.innerHTML = `<img src="${finalUrl}" alt="${s.siteName || ''}" style="max-height: 50px; width: auto; object-fit: contain;" onerror="this.style.display='none'; this.parentNode.textContent='${s.siteName || ''}';">`;
+    } else {
+        logoEl.textContent = s.siteName || '';
+    }
+}
 
 let selectedCategoryImageData = null;
 

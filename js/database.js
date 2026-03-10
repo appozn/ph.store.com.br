@@ -1,6 +1,6 @@
 /*
  * =========================================================================
- *  BANCO DE DADOS (SUPABASE) - PERSISTÊNCIA REAL
+ *  BANCO DE DADOS (SUPABASE) - PERSISTÊNCIA REAL COM DIAGNÓSTICO
  * =========================================================================
  */
 
@@ -41,9 +41,11 @@ class Database {
         this.data = JSON.parse(JSON.stringify(defaultData));
         this.supabase = null;
 
-        // Somente inicializa se o script do Supabase estiver carregado
         if (typeof supabase !== 'undefined') {
             this.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            console.log("%c[DB] Cliente Supabase pronto.", "color: #4ade80; font-weight: bold;");
+        } else {
+            console.error("%c[DB] SDK do Supabase não encontrado! Verifique o script no HTML.", "color: #f87171; font-weight: bold;");
         }
     }
 
@@ -52,68 +54,148 @@ class Database {
     }
 
     async init() {
-        console.log("Iniciando Banco de Dados...");
-        if (!this.supabase && typeof supabase !== 'undefined') {
-            this.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            console.log("Cliente Supabase criado.");
-        }
-
+        console.group("Iniciando PH STORE DB");
         if (this.supabase) {
             try {
-                console.log("Buscando dados do Supabase...");
                 await this.fetchAll();
-                console.log("Dados carregados com sucesso.");
+                console.log("[DB] Inicialização concluída com sucesso.");
+                // Tenta migrar se o Supabase estiver vazio após o fetch
+                await this.migrateLocalToSupabase();
             } catch (err) {
-                console.error("Erro crítico na busca do Supabase:", err);
+                console.error("[DB] Falha crítica no fetch:", err);
                 this.loadFromLocalStorageFallback();
             }
         } else {
-            console.warn("Supabase não disponível. Usando LocalStorage.");
             this.loadFromLocalStorageFallback();
         }
+        console.groupEnd();
         return Promise.resolve();
     }
 
-    async fetchAll() {
-        try {
-            const [products, categories, offers, settings] = await Promise.all([
-                this.supabase.from('products').select('*'),
-                this.supabase.from('categories').select('*'),
-                this.supabase.from('offers').select('*'),
-                this.supabase.from('settings').select('*')
-            ]);
+    async migrateLocalToSupabase() {
+        if (localStorage.getItem('ph_migration_v4_success')) return;
 
-            if (products.error) console.error("Erro ao buscar produtos:", products.error);
-            else this.data.products = products.data;
+        // Se o Supabase estiver vazio, mas o localStorage tiver produtos, migra.
+        if (this.data.products.length === 0) {
+            const raw = localStorage.getItem(DB_KEY);
+            if (raw) {
+                const localData = JSON.parse(raw);
+                if (localData.products && localData.products.length > 0) {
+                    console.log("[DB] Iniciando migração para Supabase...");
 
-            if (categories.error) console.error("Erro ao buscar categorias:", categories.error);
-            else this.data.categories = categories.data;
+                    try {
+                        // Categorias
+                        if (localData.categories && localData.categories.length > 0) {
+                            const cats = localData.categories.map(c => ({ name: c.name, image: c.image }));
+                            await this.supabase.from('categories').insert(cats);
+                        }
 
-            if (offers.error) console.error("Erro ao buscar ofertas:", offers.error);
-            else this.data.offers = offers.data;
+                        // Produtos
+                        const prods = localData.products.map(p => ({
+                            name: p.name,
+                            description: p.description,
+                            price: p.price,
+                            image: p.image,
+                            categoryid: p.categoryId || p.categoryid,
+                            paymentlink: p.paymentLink || p.paymentlink,
+                            user_id: p.user_id || 'admin'
+                        }));
 
-            if (settings.error) console.error("Erro ao buscar configurações:", settings.error);
-            else if (settings.data && settings.data.length > 0) this.data.settings = settings.data[0];
+                        const { error } = await this.supabase.from('products').insert(prods);
+                        // Configurações
+                        if (localData.settings) {
+                            const s = localData.settings;
+                            const payload = {
+                                id: 'global',
+                                sitename: s.siteName,
+                                herotitle: s.heroTitle,
+                                herosubtitle: s.heroSubtitle,
+                                primarycolor: s.primaryColor,
+                                logourl: s.logoUrl,
+                                logosize: s.logoSize,
+                                instagramlink: s.instagramLink
+                            };
+                            await this.supabase.from('settings').upsert(payload);
+                        }
 
-            this.dispatchUpdate();
-        } catch (e) {
-            console.error("Exceção em fetchAll:", e);
-            throw e;
+                        localStorage.setItem('ph_migration_v4_success', 'true');
+                        console.log("[DB] Migração concluída com sucesso.");
+                        await this.fetchAll();
+                    } catch (err) {
+                        console.error("[DB] Falha crítica na migração:", err);
+                    }
+                }
+            }
         }
+    }
+
+    // Normaliza nomes de campos (case-insensitive para PostgreSQL)
+    normalize(item) {
+        if (!item) return item;
+        const normalized = {};
+        for (const key in item) {
+            const lowerKey = key.toLowerCase();
+            // Mapeia nomes conhecidos para o camelCase esperado pelo JS do site
+            if (lowerKey === 'categoryid') normalized.categoryId = item[key];
+            else if (lowerKey === 'paymentlink') normalized.paymentLink = item[key];
+            else if (lowerKey === 'promoprice') normalized.promoPrice = item[key];
+            else if (lowerKey === 'productid') normalized.productId = item[key];
+            else if (lowerKey === 'sitename') normalized.siteName = item[key];
+            else if (lowerKey === 'herotitle') normalized.heroTitle = item[key];
+            else if (lowerKey === 'herosubtitle') normalized.heroSubtitle = item[key];
+            else if (lowerKey === 'primarycolor') normalized.primaryColor = item[key];
+            else if (lowerKey === 'logourl') normalized.logoUrl = item[key];
+            else if (lowerKey === 'logosize') normalized.logoSize = item[key];
+            else if (lowerKey === 'instagramlink') normalized.instagramLink = item[key];
+            else normalized[key] = item[key];
+        }
+        return normalized;
+    }
+
+    async fetchAll() {
+        const fetch = async (table) => {
+            const { data, error } = await this.supabase.from(table).select('*');
+            if (error) {
+                console.warn(`[DB] Erro na tabela '${table}':`, error.message);
+                return null; // Retorna null para indicar falha de rede/tabela
+            }
+            return (data || []).map(item => this.normalize(item));
+        };
+
+        const [products, categories, offers, settings] = await Promise.all([
+            fetch('products'),
+            fetch('categories'),
+            fetch('offers'),
+            this.supabase.from('settings').select('*').limit(1)
+        ]);
+
+        // PROTEÇÃO: Só substitui se o fetch funcionou (evita limpar o site por erro de conexão)
+        if (products !== null) this.data.products = products;
+        if (categories !== null) this.data.categories = categories;
+        if (offers !== null) this.data.offers = offers;
+
+        if (settings.data && settings.data.length > 0) {
+            const normalizedSettings = this.normalize(settings.data[0]);
+            // Só sobrescreve o logo se ele tiver um valor real
+            if (!normalizedSettings.logoUrl) {
+                delete normalizedSettings.logoUrl;
+            }
+            this.data.settings = { ...this.data.settings, ...normalizedSettings };
+        }
+
+        console.log(`[DB] Dados carregados: ${this.data.products.length} Produtos, ${this.data.categories.length} Categorias.`);
+        this.dispatchUpdate();
     }
 
     loadFromLocalStorageFallback() {
         const raw = localStorage.getItem(DB_KEY);
         if (raw) {
             this.data = JSON.parse(raw);
+            console.log("[DB] Carregado do cache local (Offline Mode).");
+        } else {
+            console.log("[DB] Iniciando com dados padrão.");
         }
         this.ensureDataIntegrity();
-    }
-
-    // No modo Supabase, as mudanças são salvas imediatamente por ação.
-    // Esse método permanece para compatibilidade.
-    async save() {
-        return true;
     }
 
     ensureDataIntegrity() {
@@ -125,10 +207,12 @@ class Database {
         if (!this.data.settings) this.data.settings = JSON.parse(JSON.stringify(defaultData.settings));
 
         const hasAdmin = this.data.users.find(u => u.email === 'admin@ph.store');
-        if (!hasAdmin) {
-            this.data.users.push(defaultData.users[0]);
-        }
+        if (!hasAdmin) this.data.users.push(defaultData.users[0]);
     }
+
+    // No modo Supabase, as mudanças são salvas imediatamente por ação.
+    // Esse método permanece para compatibilidade.
+    async save() { return true; }
 
     // --- Métodos Públicos ---
 
@@ -136,7 +220,18 @@ class Database {
     async updateSettings(newSettings) {
         this.data.settings = { ...this.data.settings, ...newSettings };
         if (this.supabase) {
-            await this.supabase.from('settings').upsert({ id: 'global', ...this.data.settings });
+            const s = this.data.settings;
+            const payload = {
+                id: 'global',
+                sitename: s.siteName,
+                herotitle: s.heroTitle,
+                herosubtitle: s.heroSubtitle,
+                primarycolor: s.primaryColor,
+                logourl: s.logoUrl,
+                logosize: s.logoSize,
+                instagramlink: s.instagramLink
+            };
+            await this.supabase.from('settings').upsert(payload);
         }
         this.dispatchUpdate();
         return true;
@@ -147,102 +242,105 @@ class Database {
         const cat = { name, image };
         if (this.supabase) {
             const { data, error } = await this.supabase.from('categories').insert([cat]).select();
-            if (!error && data) {
-                this.data.categories.push(data[0]);
-                this.dispatchUpdate();
-                return data[0];
+            if (error) {
+                alert("Erro ao salvar categoria no Supabase: " + error.message);
+                throw error;
             }
+            const newCat = this.normalize(data[0]);
+            this.data.categories.push(newCat);
+            this.dispatchUpdate();
+            return newCat;
         }
-        // Fallback or if no supabase
-        const localCat = { id: 'CAT-' + Date.now(), ...cat };
-        this.data.categories.push(localCat);
-        this.dispatchUpdate();
-        return localCat;
+        return null;
     }
 
     async updateCategory(id, name, image = '') {
-        const index = this.data.categories.findIndex(c => c.id === id);
-        if (index !== -1) {
-            this.data.categories[index] = { ...this.data.categories[index], name, image };
-            if (this.supabase) {
-                await this.supabase.from('categories').update({ name, image }).eq('id', id);
-            }
-            this.dispatchUpdate();
+        if (this.supabase) {
+            const { error } = await this.supabase.from('categories').update({ name, image }).eq('id', id);
+            if (error) throw error;
+            await this.fetchAll(); // Recarregar para garantir sincronia
         }
     }
 
     async deleteCategory(id) {
-        this.data.categories = this.data.categories.filter(c => c.id !== id);
         if (this.supabase) {
-            await this.supabase.from('categories').delete().eq('id', id);
+            const { error } = await this.supabase.from('categories').delete().eq('id', id);
+            if (error) throw error;
+            await this.fetchAll();
         }
-        this.dispatchUpdate();
     }
 
-    getProducts() { return this.data.products || []; }
+    // --- Métodos de PRODUTOS ---
     async addProduct(product) {
         const user = this.getLoggedUser();
-        if (user) product.user_id = user.id; // Associar ao admin logado
+        const payload = {
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            image: product.image,
+            categoryid: product.categoryId,
+            paymentlink: product.paymentLink,
+            user_id: user ? user.id : 'admin'
+        };
 
         if (this.supabase) {
-            const { data, error } = await this.supabase.from('products').insert([product]).select();
-            if (!error && data) {
-                this.data.products.push(data[0]);
-                this.dispatchUpdate();
-                return data[0];
-            } else if (error) {
-                console.error("Erro Supabase addProduct:", error);
+            const { data, error } = await this.supabase.from('products').insert([payload]).select();
+            if (error) {
+                console.error("[DB] Erro no INSERT:", error);
+                alert("Erro ao salvar produto: " + error.message);
                 throw error;
             }
+            const newProd = this.normalize(data[0]);
+            this.data.products.push(newProd);
+            this.dispatchUpdate();
+            return newProd;
         }
-
-        product.id = 'PROD-' + Date.now();
-        this.data.products.push(product);
-        this.dispatchUpdate();
-        return product;
+        throw new Error("Supabase não inicializado.");
     }
 
-    async updateProduct(id, updatedData) {
-        const index = this.data.products.findIndex(p => p.id === id);
-        if (index !== -1) {
-            this.data.products[index] = { ...this.data.products[index], ...updatedData };
-            if (this.supabase) {
-                const { error } = await this.supabase.from('products').update(updatedData).eq('id', id);
-                if (error) throw error;
-            }
-            this.dispatchUpdate();
+    async updateProduct(id, product) {
+        if (this.supabase) {
+            const payload = {
+                name: product.name,
+                description: product.description,
+                price: product.price,
+                image: product.image,
+                categoryid: product.categoryId || product.categoryid,
+                paymentlink: product.paymentLink || product.paymentlink
+            };
+            const { error } = await this.supabase.from('products').update(payload).eq('id', id);
+            if (error) throw error;
+            await this.fetchAll();
         }
     }
 
     async deleteProduct(id) {
-        this.data.products = this.data.products.filter(p => p.id !== id);
         if (this.supabase) {
-            await this.supabase.from('products').delete().eq('id', id);
+            const { error } = await this.supabase.from('products').delete().eq('id', id);
+            if (error) throw error;
+            await this.fetchAll();
         }
-        this.dispatchUpdate();
     }
 
     getOffers() { return this.data.offers || []; }
     async addOffer(offer) {
         if (this.supabase) {
-            const { data, error } = await this.supabase.from('offers').insert([offer]).select();
-            if (!error && data) {
-                this.data.offers.push(data[0]);
-                this.dispatchUpdate();
-                return;
-            }
+            const payload = {
+                productid: offer.productId || offer.productid,
+                promoprice: offer.promoPrice || offer.promoprice
+            };
+            const { error } = await this.supabase.from('offers').insert([payload]);
+            if (error) throw error;
+            await this.fetchAll();
         }
-        offer.id = 'OFFER-' + Date.now();
-        this.data.offers.push(offer);
-        this.dispatchUpdate();
     }
 
     async deleteOffer(id) {
-        this.data.offers = this.data.offers.filter(o => o.id !== id);
         if (this.supabase) {
-            await this.supabase.from('offers').delete().eq('id', id);
+            const { error } = await this.supabase.from('offers').delete().eq('id', id);
+            if (error) throw error;
+            await this.fetchAll();
         }
-        this.dispatchUpdate();
     }
 
     // Auth
