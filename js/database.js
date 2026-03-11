@@ -17,7 +17,8 @@ const defaultData = {
         primaryColor: '#e7229b',
         logoUrl: 'img/logo.png',
         logoSize: 100,
-        instagramLink: ''
+        instagramLink: '',
+        whatsappNumber: '5544997153209'
     },
     users: [
         {
@@ -75,15 +76,14 @@ class Database {
     async migrateLocalToSupabase() {
         if (localStorage.getItem('ph_migration_v4_success')) return;
 
-        // Se o Supabase estiver vazio, mas o localStorage tiver produtos, migra.
         if (this.data.products.length === 0) {
-            const raw = localStorage.getItem(DB_KEY);
-            if (raw) {
-                const localData = JSON.parse(raw);
-                if (localData.products && localData.products.length > 0) {
-                    console.log("[DB] Iniciando migração para Supabase...");
+            try {
+                const raw = localStorage.getItem(DB_KEY);
+                if (raw) {
+                    const localData = JSON.parse(raw);
+                    if (localData && localData.products && localData.products.length > 0) {
+                        console.log("[DB] Iniciando migração para Supabase...");
 
-                    try {
                         // Categorias
                         if (localData.categories && localData.categories.length > 0) {
                             const cats = localData.categories.map(c => ({ name: c.name, image: c.image }));
@@ -101,7 +101,8 @@ class Database {
                             user_id: p.user_id || 'admin'
                         }));
 
-                        const { error } = await this.supabase.from('products').insert(prods);
+                        await this.supabase.from('products').insert(prods);
+
                         // Configurações
                         if (localData.settings) {
                             const s = localData.settings;
@@ -121,10 +122,10 @@ class Database {
                         localStorage.setItem('ph_migration_v4_success', 'true');
                         console.log("[DB] Migração concluída com sucesso.");
                         await this.fetchAll();
-                    } catch (err) {
-                        console.error("[DB] Falha crítica na migração:", err);
                     }
                 }
+            } catch (err) {
+                console.error("[DB] Falha durante a migração/leitura local:", err);
             }
         }
     }
@@ -133,67 +134,90 @@ class Database {
     normalize(item) {
         if (!item) return item;
         const normalized = {};
+        const fieldMap = {
+            categoryid: 'categoryId',
+            paymentlink: 'paymentLink',
+            promoprice: 'promoPrice',
+            productid: 'productId',
+            sitename: 'siteName',
+            herotitle: 'heroTitle',
+            herosubtitle: 'heroSubtitle',
+            primarycolor: 'primaryColor',
+            logourl: 'logoUrl',
+            logosize: 'logoSize',
+            instagramlink: 'instagramLink',
+            whatsappnumber: 'whatsappNumber'
+        };
+
         for (const key in item) {
             const lowerKey = key.toLowerCase();
-            // Mapeia nomes conhecidos para o camelCase esperado pelo JS do site
-            if (lowerKey === 'categoryid') normalized.categoryId = item[key];
-            else if (lowerKey === 'paymentlink') normalized.paymentLink = item[key];
-            else if (lowerKey === 'promoprice') normalized.promoPrice = item[key];
-            else if (lowerKey === 'productid') normalized.productId = item[key];
-            else if (lowerKey === 'sitename') normalized.siteName = item[key];
-            else if (lowerKey === 'herotitle') normalized.heroTitle = item[key];
-            else if (lowerKey === 'herosubtitle') normalized.heroSubtitle = item[key];
-            else if (lowerKey === 'primarycolor') normalized.primaryColor = item[key];
-            else if (lowerKey === 'logourl') normalized.logoUrl = item[key];
-            else if (lowerKey === 'logosize') normalized.logoSize = item[key];
-            else if (lowerKey === 'instagramlink') normalized.instagramLink = item[key];
-            else normalized[key] = item[key];
+            const targetKey = fieldMap[lowerKey] || key;
+            normalized[targetKey] = item[key];
         }
         return normalized;
     }
 
     async fetchAll() {
-        const fetch = async (table) => {
-            const { data, error } = await this.supabase.from(table).select('*');
-            if (error) {
-                console.warn(`[DB] Erro na tabela '${table}':`, error.message);
-                return null; // Retorna null para indicar falha de rede/tabela
+        try {
+            const fetchTable = async (table) => {
+                try {
+                    const { data, error } = await this.supabase.from(table).select('*');
+                    if (error) {
+                        console.warn(`[DB] Erro na tabela '${table}':`, error.message);
+                        return null;
+                    }
+                    return (data || []).map(item => this.normalize(item));
+                } catch (e) {
+                    console.error(`[DB] Erro inesperado ao buscar ${table}:`, e);
+                    return null;
+                }
+            };
+
+            const [products, categories, offers, settingsResult] = await Promise.all([
+                fetchTable('products'),
+                fetchTable('categories'),
+                fetchTable('offers'),
+                this.supabase.from('settings').select('*').limit(1).catch(e => ({ error: e }))
+            ]);
+
+            if (products) {
+                this.data.products = products;
+                console.log(`[DB] ${products.length} produtos carregados.`);
             }
-            return (data || []).map(item => this.normalize(item));
-        };
-
-        const [products, categories, offers, settings] = await Promise.all([
-            fetch('products'),
-            fetch('categories'),
-            fetch('offers'),
-            this.supabase.from('settings').select('*').limit(1)
-        ]);
-
-        // PROTEÇÃO: Só substitui se o fetch funcionou (evita limpar o site por erro de conexão)
-        if (products !== null) this.data.products = products;
-        if (categories !== null) this.data.categories = categories;
-        if (offers !== null) this.data.offers = offers;
-
-        if (settings.data && settings.data.length > 0) {
-            const normalizedSettings = this.normalize(settings.data[0]);
-            // Só sobrescreve o logo se ele tiver um valor real
-            if (!normalizedSettings.logoUrl) {
-                delete normalizedSettings.logoUrl;
+            if (categories) {
+                this.data.categories = categories;
+                console.log(`[DB] ${categories.length} categorias carregadas.`);
             }
-            this.data.settings = { ...this.data.settings, ...normalizedSettings };
+            if (offers) {
+                this.data.offers = offers;
+            }
+
+            if (settingsResult && settingsResult.data && settingsResult.data.length > 0) {
+                const normalizedSettings = this.normalize(settingsResult.data[0]);
+                if (!normalizedSettings.logoUrl) delete normalizedSettings.logoUrl;
+                this.data.settings = { ...this.data.settings, ...normalizedSettings };
+            }
+
+            console.log(`[DB] Sincronização concluída: ${this.data.products.length} Produtos.`);
+            this.dispatchUpdate();
+        } catch (err) {
+            console.error("[DB] Erro fatal no fetchAll:", err);
+            throw err; // Repassa para o init lidar
         }
-
-        console.log(`[DB] Dados carregados: ${this.data.products.length} Produtos, ${this.data.categories.length} Categorias.`);
-        this.dispatchUpdate();
     }
 
     loadFromLocalStorageFallback() {
-        const raw = localStorage.getItem(DB_KEY);
-        if (raw) {
-            this.data = JSON.parse(raw);
-            console.log("[DB] Carregado do cache local (Offline Mode).");
-        } else {
-            console.log("[DB] Iniciando com dados padrão.");
+        try {
+            const raw = localStorage.getItem(DB_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    this.data = parsed;
+                    console.log("[DB] Cache local recuperado.");
+                }
+            }
+        } catch (e) {
+            console.error("[DB] Cache local corrompido, usando padrões.", e);
         }
         this.ensureDataIntegrity();
     }
@@ -210,9 +234,46 @@ class Database {
         if (!hasAdmin) this.data.users.push(defaultData.users[0]);
     }
 
-    // No modo Supabase, as mudanças são salvas imediatamente por ação.
-    // Esse método permanece para compatibilidade.
-    async save() { return true; }
+    // Força o salvamento local de segurança
+    async save() {
+        try {
+            // Se os dados forem muito grandes (base64), tenta salvar sem o cache de imagens para não estourar o limite
+            const dataToSave = JSON.parse(JSON.stringify(this.data));
+
+            // Tenta salvar completo
+            try {
+                localStorage.setItem(DB_KEY, JSON.stringify(dataToSave));
+            } catch (quotaErr) {
+                console.warn("[DB] Limite de armazenamento local atingido. Removendo imagens do cache para salvar.");
+                // Remove imagens base64 dos produtos no cache de backup para salvar espaço
+                if (dataToSave.products) {
+                    dataToSave.products.forEach(p => {
+                        if (p.image && p.image.length > 5000) p.image = '';
+                    });
+                }
+                localStorage.setItem(DB_KEY, JSON.stringify(dataToSave));
+            }
+            console.log("[DB] Cache local sincronizado.");
+            return true;
+        } catch (e) {
+            console.error("[DB] Falha ao salvar cache:", e);
+            return false;
+        }
+    }
+
+    // Utilitário para limpar número de WhatsApp
+    cleanWhatsApp(number) {
+        if (!number) return '';
+        // Se for um link completo, tenta extrair o número
+        if (number.includes('wa.me/')) {
+            const parts = number.split('wa.me/');
+            number = parts[parts.length - 1].split('?')[0];
+        } else if (number.includes('whatsapp.com/send')) {
+            const urlParams = new URLSearchParams(number.split('?')[1]);
+            number = urlParams.get('phone') || number;
+        }
+        return number.replace(/\D/g, '');
+    }
 
     // --- Métodos Públicos ---
 
@@ -229,7 +290,8 @@ class Database {
                 primarycolor: s.primaryColor,
                 logourl: s.logoUrl,
                 logosize: s.logoSize,
-                instagramlink: s.instagramLink
+                instagramlink: s.instagramLink,
+                whatsappnumber: s.whatsappNumber
             };
             await this.supabase.from('settings').upsert(payload);
         }
@@ -248,10 +310,17 @@ class Database {
             }
             const newCat = this.normalize(data[0]);
             this.data.categories.push(newCat);
+            await this.save(); // Backup local
+            this.dispatchUpdate();
+            return newCat;
+        } else {
+            // Modo Local
+            const newCat = { id: 'CAT-' + Date.now(), name, image };
+            this.data.categories.push(newCat);
+            await this.save();
             this.dispatchUpdate();
             return newCat;
         }
-        return null;
     }
 
     async updateCategory(id, name, image = '') {
@@ -259,6 +328,13 @@ class Database {
             const { error } = await this.supabase.from('categories').update({ name, image }).eq('id', id);
             if (error) throw error;
             await this.fetchAll(); // Recarregar para garantir sincronia
+        } else {
+            const idx = this.data.categories.findIndex(c => c.id === id);
+            if (idx !== -1) {
+                this.data.categories[idx] = { ...this.data.categories[idx], name, image };
+                await this.save();
+                this.dispatchUpdate();
+            }
         }
     }
 
@@ -267,8 +343,14 @@ class Database {
             const { error } = await this.supabase.from('categories').delete().eq('id', id);
             if (error) throw error;
             await this.fetchAll();
+        } else {
+            this.data.categories = this.data.categories.filter(c => c.id !== id);
+            await this.save();
+            this.dispatchUpdate();
         }
     }
+
+    getProducts() { return this.data.products || []; }
 
     // --- Métodos de PRODUTOS ---
     async addProduct(product) {
@@ -280,22 +362,27 @@ class Database {
             image: product.image,
             categoryid: product.categoryId,
             paymentlink: product.paymentLink,
-            user_id: user ? user.id : 'admin'
+            user_id: user ? String(user.id) : 'admin'
         };
 
         if (this.supabase) {
             const { data, error } = await this.supabase.from('products').insert([payload]).select();
             if (error) {
                 console.error("[DB] Erro no INSERT:", error);
-                alert("Erro ao salvar produto: " + error.message);
                 throw error;
             }
             const newProd = this.normalize(data[0]);
             this.data.products.push(newProd);
+            await this.save();
+            this.dispatchUpdate();
+            return newProd;
+        } else {
+            const newProd = { ...product, id: 'PROD-' + Date.now() };
+            this.data.products.push(newProd);
+            await this.save();
             this.dispatchUpdate();
             return newProd;
         }
-        throw new Error("Supabase não inicializado.");
     }
 
     async updateProduct(id, product) {
@@ -305,12 +392,19 @@ class Database {
                 description: product.description,
                 price: product.price,
                 image: product.image,
-                categoryid: product.categoryId || product.categoryid,
-                paymentlink: product.paymentLink || product.paymentlink
+                categoryid: product.categoryId,
+                paymentlink: product.paymentLink
             };
             const { error } = await this.supabase.from('products').update(payload).eq('id', id);
             if (error) throw error;
             await this.fetchAll();
+        } else {
+            const idx = this.data.products.findIndex(p => p.id === id);
+            if (idx !== -1) {
+                this.data.products[idx] = { ...this.data.products[idx], ...product };
+                await this.save();
+                this.dispatchUpdate();
+            }
         }
     }
 
@@ -319,6 +413,10 @@ class Database {
             const { error } = await this.supabase.from('products').delete().eq('id', id);
             if (error) throw error;
             await this.fetchAll();
+        } else {
+            this.data.products = this.data.products.filter(p => p.id !== id);
+            await this.save();
+            this.dispatchUpdate();
         }
     }
 

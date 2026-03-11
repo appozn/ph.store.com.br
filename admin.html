@@ -107,6 +107,15 @@
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                         <span class="menu-text">Contas</span></a></li>
+                <li><a href="#settings" data-view="settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                        <span class="menu-text">Configurações</span></a></li>
             </ul>
         </aside>
 
@@ -291,6 +300,14 @@
                 </div>
             </section>
 
+            <!-- SETTINGS VIEW -->
+            <section id="view-settings" class="view-section hidden">
+                <div class="container">
+                    <h1 class="mb-4">Configurações Gerais</h1>
+                    <p class="text-muted">Carregando...</p>
+                </div>
+            </section>
+
 
         </main>
     </div>
@@ -324,27 +341,51 @@
                     <label class="form-label">Preço (R$)</label>
                     <input type="text" id="prodPrice" class="form-control" placeholder="0,00" required>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Link de Pagamento (WhatsApp - Obrigatório)</label>
-                    <input type="url" id="prodPaymentLink" class="form-control"
-                        placeholder="Ex: https://wa.me/5511999999999" required>
+                <div class="form-group"
+                    style="padding: 15px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color);">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                            </path>
+                        </svg>
+                        Número de WhatsApp do Produto
+                    </label>
+                    <input type="text" id="prodPaymentLink" class="form-control" placeholder="Ex: 5544999999999">
+                    <small style="color: var(--text-muted); font-size: 11px;">Apenas números. Se vazio, usará o número
+                        geral da loja.</small>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-top: 20px;">
                     <label class="form-label">Imagem do Produto</label>
-                    <div id="productImagePreview" style="display: none; margin-bottom: 10px; text-align: center;">
-                        <img src="" style="max-height: 150px; border-radius: 8px; box-shadow: var(--shadow-sm);">
+                    <div id="productImagePreview"
+                        style="display: none; margin-bottom: 12px; text-align: center; background: #f9f9f9; padding: 10px; border-radius: 8px;">
+                        <img src="" style="max-height: 180px; width: auto; border-radius: 4px;">
+                        <p id="uploadStatusText"
+                            style="font-size: 12px; color: #4ade80; margin-top: 5px; font-weight: 600;">✓ Foto Carregada
+                        </p>
                     </div>
-                    <input type="url" id="prodImage" class="form-control" placeholder="https://exemplo.com/imagem.png">
-                    <div style="margin-top: 8px; display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 13px; color: var(--text-muted);">Ou</span>
-                        <input type="file" id="prodImageFile" accept="image/*" style="display: none;">
-                        <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 13px;"
+
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-primary"
+                            style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;"
                             onclick="document.getElementById('prodImageFile').click()">
-                            <i class="fas fa-upload"></i> Anexar Foto
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Escolher Foto da Galeria
                         </button>
                     </div>
-                    <small style="color: var(--text-muted); display: block; margin-top: 5px;">Use uma URL ou anexe uma
-                        foto da galeria.</small>
+                    <input type="file" id="prodImageFile" accept="image/*" style="display: none;">
+
+                    <details style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                        <summary style="cursor: pointer;">Usar link de imagem externa (opcional)</summary>
+                        <input type="text" id="prodImage" class="form-control" style="margin-top: 5px;"
+                            placeholder="https://exemplo.com/foto.jpg">
+                    </details>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="button" class="btn btn-outline" onclick="closeProductModal()">Cancelar</button>
@@ -367,18 +408,33 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Capa da Categoria (1080x1350)</label>
-                    <div id="categoryImagePreview" style="display: none; margin-bottom: 10px; text-align: center;">
-                        <img src="" style="max-height: 150px; border-radius: 8px; box-shadow: var(--shadow-sm);">
+                    <div id="categoryImagePreview"
+                        style="display: none; margin-bottom: 12px; text-align: center; background: #f9f9f9; padding: 10px; border-radius: 8px;">
+                        <img src="" style="max-height: 180px; width: auto; border-radius: 4px;">
+                        <p style="font-size: 12px; color: #4ade80; margin-top: 5px; font-weight: 600;">✓ Capa Carregada
+                        </p>
                     </div>
-                    <input type="url" id="catImage" class="form-control" placeholder="https://exemplo.com/capa.png">
-                    <div style="margin-top: 8px; display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 13px; color: var(--text-muted);">Ou</span>
-                        <input type="file" id="catImageFile" accept="image/*" style="display: none;">
-                        <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 13px;"
+
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-primary"
+                            style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;"
                             onclick="document.getElementById('catImageFile').click()">
-                            <i class="fas fa-upload"></i> Anexar Capa
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Escolher Capa da Galeria
                         </button>
                     </div>
+                    <input type="file" id="catImageFile" accept="image/*" style="display: none;">
+
+                    <details style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                        <summary style="cursor: pointer;">Usar link de imagem externa (opcional)</summary>
+                        <input type="text" id="catImage" class="form-control" style="margin-top: 5px;"
+                            placeholder="https://exemplo.com/capa.jpg">
+                    </details>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="button" class="btn btn-outline" onclick="closeCategoryModal()">Cancelar</button>

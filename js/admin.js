@@ -28,11 +28,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAdminLogo();
 
     // Logout
-    document.getElementById('logoutBtn').addEventListener('click', (e) => {
-        e.preventDefault();
-        db.logout();
-        window.location.href = 'login.html';
-    });
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            db.logout();
+            window.location.href = 'login.html';
+        });
+    }
 
     // Salvar Alterações Button
     const saveGlobalBtn = document.getElementById('saveGlobalBtn');
@@ -63,17 +66,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Theme Toggle
-    document.getElementById('toggleThemeBtn').addEventListener('click', (e) => {
-        e.preventDefault();
-        const isDark = document.body.getAttribute('data-theme') === 'dark';
-        if (isDark) {
-            document.body.removeAttribute('data-theme');
-            localStorage.setItem('admin_theme', 'light');
-        } else {
-            document.body.setAttribute('data-theme', 'dark');
-            localStorage.setItem('admin_theme', 'dark');
-        }
-    });
+    const themeBtn = document.getElementById('toggleThemeBtn');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                document.body.removeAttribute('data-theme');
+                localStorage.setItem('admin_theme', 'light');
+            } else {
+                document.body.setAttribute('data-theme', 'dark');
+                localStorage.setItem('admin_theme', 'dark');
+            }
+        });
+    }
 
     // Load saved theme
     if (localStorage.getItem('admin_theme') === 'dark') {
@@ -264,7 +270,7 @@ function initNavigation() {
 
 function handleHashChange() {
     let hash = window.location.hash.replace('#', '');
-    const validViews = ['dashboard', 'products', 'categories', 'offers', 'users'];
+    const validViews = ['dashboard', 'products', 'categories', 'offers', 'users', 'settings'];
     if (!hash || !validViews.includes(hash)) hash = 'products';
 
     const links = document.querySelectorAll('.admin-menu a[data-view]');
@@ -292,6 +298,7 @@ function handleHashChange() {
     if (hash === 'products') loadProducts();
     if (hash === 'offers') loadOffers();
     if (hash === 'dashboard') loadDashboard();
+    if (hash === 'settings') loadSettings();
 
     // Fechar menu no mobile após clicar para facilitar a navegação
     if (window.innerWidth <= 992) {
@@ -390,7 +397,13 @@ function editCategory(id) {
         } else {
             imgInput.value = category.image || '';
             selectedCategoryImageData = null;
-            document.getElementById('categoryImagePreview').style.display = 'none';
+            if (category.image) {
+                const previewDiv = document.getElementById('categoryImagePreview');
+                previewDiv.style.display = 'block';
+                previewDiv.querySelector('img').src = category.image;
+            } else {
+                document.getElementById('categoryImagePreview').style.display = 'none';
+            }
         }
 
         document.getElementById('categoryModal').classList.add('show');
@@ -436,9 +449,9 @@ function initFormListeners() {
                     return;
                 }
 
-                let finalImageUrl = document.getElementById('catImage').value.trim();
-                if (finalImageUrl === 'Imagem anexada (pronta para salvar)') {
-                    finalImageUrl = selectedCategoryImageData || '';
+                let finalImageUrl = selectedCategoryImageData;
+                if (!finalImageUrl) {
+                    finalImageUrl = document.getElementById('catImage').value.trim();
                 }
 
                 if (!finalImageUrl) {
@@ -501,12 +514,19 @@ function initFormListeners() {
                     return;
                 }
 
-                let finalImageUrl = document.getElementById('prodImage').value.trim();
-                if (finalImageUrl === 'Imagem anexada (pronta para salvar)') {
-                    finalImageUrl = selectedProductImageData || '';
+                // Prioridade: Foto enviada via botão > Link digitado no campo oculto
+                let finalImageUrl = selectedProductImageData;
+                if (!finalImageUrl) {
+                    finalImageUrl = document.getElementById('prodImage').value.trim();
                 }
 
-                const paymentLink = document.getElementById('prodPaymentLink').value.trim();
+                if (!finalImageUrl) {
+                    showToast('Escolha uma foto ou insira um link de imagem.', 'error');
+                    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+                    return;
+                }
+
+                const paymentLink = db.cleanWhatsApp(document.getElementById('prodPaymentLink').value.trim());
 
                 const productData = {
                     name,
@@ -514,7 +534,7 @@ function initFormListeners() {
                     description: document.getElementById('prodDesc').value.trim(),
                     price,
                     image: finalImageUrl,
-                    paymentLink
+                    paymentLink: paymentLink || ''
                 };
 
                 if (id) {
@@ -608,7 +628,7 @@ function loadProducts() {
     const fragment = document.createDocumentFragment();
 
     products.forEach(p => {
-        const cat = categories.find(c => c.id === p.categoryId);
+        const cat = categories.find(c => String(c.id) === String(p.categoryId));
         const catName = cat ? cat.name : '<span style="color:red">Sem Categoria (Inválido)</span>';
 
         const tr = document.createElement('tr');
@@ -652,7 +672,7 @@ function populateCategorySelect(selectedId = '') {
         const option = document.createElement('option');
         option.value = c.id;
         option.textContent = c.name;
-        if (c.id === selectedId) option.selected = true;
+        if (String(c.id) === String(selectedId)) option.selected = true;
         select.appendChild(option);
     });
 
@@ -743,7 +763,13 @@ function editProduct(id) {
         } else {
             imgInput.value = product.image || '';
             selectedProductImageData = null;
-            document.getElementById('productImagePreview').style.display = 'none';
+            if (product.image) {
+                const previewDiv = document.getElementById('productImagePreview');
+                previewDiv.style.display = 'block';
+                previewDiv.querySelector('img').src = product.image;
+            } else {
+                document.getElementById('productImagePreview').style.display = 'none';
+            }
         }
 
         populateCategorySelect(product.categoryId);
@@ -859,4 +885,60 @@ function loadDashboard() { console.log("Dashboard view loaded"); }
 
 
 // SITE PREVIEW LOGIC REMOVED
+
+// SETTINGS
+function loadSettings() {
+    const s = db.getSettings();
+    const container = document.getElementById('view-settings');
+    if (!container) return;
+
+    container.innerHTML = `
+        <h1 class="mb-4">Configurações Gerais</h1>
+        <div style="background: var(--card-bg); padding: 30px; border-radius: var(--radius); border: 1px solid var(--border-color); max-width: 600px;">
+            <form id="globalSettingsForm">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label">WhatsApp da Loja (Global)</label>
+                    <input type="text" id="setWhatsapp" class="form-control" value="${s.whatsappNumber || ''}" placeholder="Ex: 5544999999999">
+                    <small style="color: var(--text-muted); display: block; margin-top: 5px;">Número padrão usado para vendas se o produto não tiver um próprio.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label">Nome da Loja</label>
+                    <input type="text" id="setSiteName" class="form-control" value="${s.siteName || ''}">
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label">Título do Hero</label>
+                    <input type="text" id="setHeroTitle" class="form-control" value="${s.heroTitle || ''}">
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label">Tamanho da Logo (Altura em px)</label>
+                    <input type="number" id="setLogoSize" class="form-control" value="${s.logoSize || 100}" min="40" max="300">
+                    <small style="color: var(--text-muted); display: block; margin-top: 5px;">Padrão: 100px. No mobile, o tamanho é otimizado automaticamente.</small>
+                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Salvar Configurações</button>
+            </form>
+        </div>
+    `;
+
+    document.getElementById('globalSettingsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        try {
+            await db.updateSettings({
+                whatsappNumber: document.getElementById('setWhatsapp').value.trim(),
+                siteName: document.getElementById('setSiteName').value.trim(),
+                heroTitle: document.getElementById('setHeroTitle').value.trim(),
+                logoSize: parseInt(document.getElementById('setLogoSize').value) || 100
+            });
+            showToast('Configurações salvas com sucesso!');
+        } catch (err) {
+            showToast('Erro ao salvar configurações.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Salvar Configurações';
+        }
+    });
+}
 
