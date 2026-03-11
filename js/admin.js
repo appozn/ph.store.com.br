@@ -382,7 +382,7 @@ function closeCategoryModal() {
 }
 
 function editCategory(id) {
-    const category = db.getCategories().find(c => c.id === id);
+    const category = db.getCategories().find(c => String(c.id) === String(id));
     if (category) {
         document.getElementById('catId').value = category.id;
         document.getElementById('catName').value = category.name;
@@ -412,7 +412,7 @@ function editCategory(id) {
 
 function deleteCategory(id) {
     // Check if any product is using this category
-    const productsUsing = db.getProducts().filter(p => p.categoryId === id);
+    const productsUsing = db.getProducts().filter(p => String(p.categoryId) === String(id));
     if (productsUsing.length > 0) {
         alert('Não é possível excluir esta categoria porque há produtos vinculados a ela.');
         return;
@@ -421,6 +421,10 @@ function deleteCategory(id) {
     if (confirm('Tem certeza que deseja excluir esta categoria?')) {
         db.deleteCategory(id).then(() => {
             showToast('Categoria excluída com sucesso!');
+            loadCategories(); // Refresh list
+        }).catch(err => {
+            console.error("Delete Category Error:", err);
+            showToast('Erro ao excluir categoria: ' + err.message, 'error');
         });
     }
 }
@@ -475,7 +479,7 @@ function initFormListeners() {
 
             } catch (err) {
                 console.error("Save Category Error:", err);
-                showToast('Erro ao salvar categoria.', 'error');
+                showToast('Erro ao salvar categoria: ' + (err.message || 'Erro desconhecido'), 'error');
                 if (btn) { btn.disabled = false; btn.textContent = originalText; }
             }
         });
@@ -745,7 +749,7 @@ function closeProductModal() {
 }
 
 function editProduct(id) {
-    const product = db.getProducts().find(p => p.id === id);
+    const product = db.getProducts().find(p => String(p.id) === String(id));
     if (product) {
         document.getElementById('prodId').value = product.id;
         document.getElementById('prodName').value = product.name;
@@ -779,9 +783,13 @@ function editProduct(id) {
 }
 
 function deleteProduct(id) {
-    if (confirm('Tem certeza que deseja excluir este produto?')) {
+    if (confirm('Deseja realmente excluir este produto?')) {
         db.deleteProduct(id).then(() => {
-            showToast('Produto excluído com sucesso!');
+            showToast('Produto excluído!');
+            loadProducts(); // Fresh list
+        }).catch(err => {
+            console.error("Delete Product Error:", err);
+            showToast('Erro ao excluir produto: ' + err.message, 'error');
         });
     }
 }
@@ -806,7 +814,7 @@ function loadOffers() {
         }
 
         offers.forEach(o => {
-            const prod = products.find(p => p.id === o.productId);
+            const prod = products.find(p => String(p.id) === String(o.productId));
             const prodName = prod ? prod.name : 'Produto Removido';
             const tr = document.createElement('tr');
 
@@ -853,6 +861,10 @@ function deleteOffer(id) {
     if (confirm('Deseja remover esta oferta?')) {
         db.deleteOffer(id).then(() => {
             showToast('Oferta removida com sucesso!');
+            loadOffers(); // Refresh UI
+        }).catch(err => {
+            console.error("Delete Offer Error:", err);
+            showToast('Erro ao remover oferta: ' + err.message, 'error');
         });
     }
 }

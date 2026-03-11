@@ -59,7 +59,7 @@ class Database {
         if (this.supabase) {
             try {
                 await this.fetchAll();
-                console.log("[DB] Inicialização concluída com sucesso.");
+                console.log("%c[DB] Inicialização concluída (v4.1 - ID Fix Applied).", "color: #4ade80; font-weight: bold;");
                 // Tenta migrar se o Supabase estiver vazio após o fetch
                 await this.migrateLocalToSupabase();
             } catch (err) {
@@ -157,6 +157,14 @@ class Database {
         return normalized;
     }
 
+    // Tenta converter ID para número se for numérico, caso contrário mantém string
+    parseId(id) {
+        if (typeof id === 'number') return id;
+        if (!id) return id;
+        const n = Number(id);
+        return isNaN(n) ? id : n;
+    }
+
     async fetchAll() {
         try {
             const fetchTable = async (table) => {
@@ -177,7 +185,13 @@ class Database {
                 fetchTable('products'),
                 fetchTable('categories'),
                 fetchTable('offers'),
-                this.supabase.from('settings').select('*').limit(1).catch(e => ({ error: e }))
+                (async () => {
+                    try {
+                        return await this.supabase.from('settings').select('*').limit(1);
+                    } catch (e) {
+                        return { error: e, data: null };
+                    }
+                })()
             ]);
 
             if (products) {
@@ -303,18 +317,25 @@ class Database {
     async addCategory(name, image = '') {
         const cat = { name, image };
         if (this.supabase) {
-            const { data, error } = await this.supabase.from('categories').insert([cat]).select();
-            if (error) {
-                alert("Erro ao salvar categoria no Supabase: " + error.message);
-                throw error;
+            try {
+                // Removemos .select() para evitar bloqueios de RLS (Row Level Security) na leitura
+                const { error } = await this.supabase.from('categories').insert([cat]);
+                if (error) {
+                    console.error("[DB] Erro CRUD (categories):", error);
+                    throw new Error(`[Código DB: ${error.code}] ${error.message} - ${error.details || ''}`);
+                }
+
+                // Forçamos atualização geral para buscar os IDs gerados pelas tabelas
+                await this.fetchAll();
+
+                // Encontra a categoria pela ordenação ou nome/imagem
+                const savedCats = this.data.categories;
+                return savedCats.length > 0 ? savedCats[savedCats.length - 1] : { id: 'CAT-' + Date.now(), ...cat };
+            } catch (err) {
+                console.error("[DB] Falha crítica em addCategory:", err);
+                throw err;
             }
-            const newCat = this.normalize(data[0]);
-            this.data.categories.push(newCat);
-            await this.save(); // Backup local
-            this.dispatchUpdate();
-            return newCat;
         } else {
-            // Modo Local
             const newCat = { id: 'CAT-' + Date.now(), name, image };
             this.data.categories.push(newCat);
             await this.save();
@@ -324,12 +345,20 @@ class Database {
     }
 
     async updateCategory(id, name, image = '') {
+        const payload = {
+            name,
+            image
+        };
         if (this.supabase) {
-            const { error } = await this.supabase.from('categories').update({ name, image }).eq('id', id);
-            if (error) throw error;
-            await this.fetchAll(); // Recarregar para garantir sincronia
+            const { error } = await this.supabase.from('categories').update(payload).eq('id', this.parseId(id));
+            if (error) {
+                console.error("[DB] Erro ao atualizar categoria:", error.message);
+                throw new Error("Erro no Supabase: " + error.message);
+            }
+            await this.fetchAll();
         } else {
-            const idx = this.data.categories.findIndex(c => c.id === id);
+            const pid = this.parseId(id);
+            const idx = this.data.categories.findIndex(c => this.parseId(c.id) === pid);
             if (idx !== -1) {
                 this.data.categories[idx] = { ...this.data.categories[idx], name, image };
                 await this.save();
@@ -340,11 +369,16 @@ class Database {
 
     async deleteCategory(id) {
         if (this.supabase) {
-            const { error } = await this.supabase.from('categories').delete().eq('id', id);
-            if (error) throw error;
+            const pid = this.parseId(id);
+            const { error } = await this.supabase.from('categories').delete().eq('id', pid);
+            if (error) {
+                console.error("[DB] Erro ao excluir categoria:", error);
+                throw new Error("Erro no Supabase: " + (error.message || JSON.stringify(error)));
+            }
             await this.fetchAll();
         } else {
-            this.data.categories = this.data.categories.filter(c => c.id !== id);
+            const pid = this.parseId(id);
+            this.data.categories = this.data.categories.filter(c => this.parseId(c.id) !== pid);
             await this.save();
             this.dispatchUpdate();
         }
@@ -366,16 +400,23 @@ class Database {
         };
 
         if (this.supabase) {
-            const { data, error } = await this.supabase.from('products').insert([payload]).select();
-            if (error) {
-                console.error("[DB] Erro no INSERT:", error);
-                throw error;
+            try {
+                // Removemos .select() para evitar bloqueios de RLS na leitura
+                const { error } = await this.supabase.from('products').insert([payload]);
+                if (error) {
+                    console.error("[DB] Erro CRUD (products):", error);
+                    throw new Error(`[Código DB: ${error.code}] ${error.message} - ${error.details || ''}`);
+                }
+
+                // Forçamos atualização geral
+                await this.fetchAll();
+
+                const savedProds = this.data.products;
+                return savedProds.length > 0 ? savedProds[savedProds.length - 1] : { id: 'PROD-' + Date.now(), ...payload };
+            } catch (err) {
+                console.error("[DB] Falha crítica em addProduct:", err);
+                throw err;
             }
-            const newProd = this.normalize(data[0]);
-            this.data.products.push(newProd);
-            await this.save();
-            this.dispatchUpdate();
-            return newProd;
         } else {
             const newProd = { ...product, id: 'PROD-' + Date.now() };
             this.data.products.push(newProd);
@@ -386,6 +427,7 @@ class Database {
     }
 
     async updateProduct(id, product) {
+        const user = this.getLoggedUser();
         if (this.supabase) {
             const payload = {
                 name: product.name,
@@ -393,13 +435,18 @@ class Database {
                 price: product.price,
                 image: product.image,
                 categoryid: product.categoryId,
-                paymentlink: product.paymentLink
+                paymentlink: product.paymentLink,
+                user_id: user ? String(user.id) : 'admin'
             };
-            const { error } = await this.supabase.from('products').update(payload).eq('id', id);
-            if (error) throw error;
+            const { error } = await this.supabase.from('products').update(payload).eq('id', this.parseId(id));
+            if (error) {
+                console.error("[DB] Erro ao atualizar produto:", error.message);
+                throw new Error("Erro no Supabase: " + error.message);
+            }
             await this.fetchAll();
         } else {
-            const idx = this.data.products.findIndex(p => p.id === id);
+            const pid = this.parseId(id);
+            const idx = this.data.products.findIndex(p => this.parseId(p.id) === pid);
             if (idx !== -1) {
                 this.data.products[idx] = { ...this.data.products[idx], ...product };
                 await this.save();
@@ -410,11 +457,16 @@ class Database {
 
     async deleteProduct(id) {
         if (this.supabase) {
-            const { error } = await this.supabase.from('products').delete().eq('id', id);
-            if (error) throw error;
+            const pid = this.parseId(id);
+            const { error } = await this.supabase.from('products').delete().eq('id', pid);
+            if (error) {
+                console.error("[DB] Erro ao excluir produto:", error);
+                throw new Error("Erro no Supabase: " + (error.message || JSON.stringify(error)));
+            }
             await this.fetchAll();
         } else {
-            this.data.products = this.data.products.filter(p => p.id !== id);
+            const pid = this.parseId(id);
+            this.data.products = this.data.products.filter(p => this.parseId(p.id) !== pid);
             await this.save();
             this.dispatchUpdate();
         }
@@ -435,8 +487,11 @@ class Database {
 
     async deleteOffer(id) {
         if (this.supabase) {
-            const { error } = await this.supabase.from('offers').delete().eq('id', id);
-            if (error) throw error;
+            const { error } = await this.supabase.from('offers').delete().eq('id', this.parseId(id));
+            if (error) {
+                console.error("[DB] Erro ao excluir oferta:", error.message);
+                throw new Error("Erro no Supabase: " + error.message);
+            }
             await this.fetchAll();
         }
     }
