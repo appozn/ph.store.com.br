@@ -96,8 +96,8 @@ class Database {
                             description: p.description,
                             price: p.price,
                             image: p.image,
-                            categoryid: p.categoryId || p.categoryid,
-                            paymentlink: p.paymentLink || p.paymentlink,
+                            category_id: p.categoryId || p.categoryid || p.category_id,
+                            payment_link: p.paymentLink || p.paymentlink || p.payment_link,
                             user_id: p.user_id || 'admin'
                         }));
 
@@ -108,13 +108,13 @@ class Database {
                             const s = localData.settings;
                             const payload = {
                                 id: 'global',
-                                sitename: s.siteName,
-                                herotitle: s.heroTitle,
-                                herosubtitle: s.heroSubtitle,
-                                primarycolor: s.primaryColor,
-                                logourl: s.logoUrl,
-                                logosize: s.logoSize,
-                                instagramlink: s.instagramLink
+                                site_name: s.siteName,
+                                hero_title: s.heroTitle,
+                                hero_subtitle: s.heroSubtitle,
+                                primary_color: s.primaryColor,
+                                logo_url: s.logoUrl,
+                                logo_size: s.logoSize,
+                                instagram_link: s.instagramLink
                             };
                             await this.supabase.from('settings').upsert(payload);
                         }
@@ -135,18 +135,18 @@ class Database {
         if (!item) return item;
         const normalized = {};
         const fieldMap = {
-            categoryid: 'categoryId',
-            paymentlink: 'paymentLink',
-            promoprice: 'promoPrice',
-            productid: 'productId',
-            sitename: 'siteName',
-            herotitle: 'heroTitle',
-            herosubtitle: 'heroSubtitle',
-            primarycolor: 'primaryColor',
-            logourl: 'logoUrl',
-            logosize: 'logoSize',
-            instagramlink: 'instagramLink',
-            whatsappnumber: 'whatsappNumber'
+            category_id: 'categoryId',
+            payment_link: 'paymentLink',
+            promo_price: 'promoPrice',
+            product_id: 'productId',
+            site_name: 'siteName',
+            hero_title: 'heroTitle',
+            hero_subtitle: 'heroSubtitle',
+            primary_color: 'primaryColor',
+            logo_url: 'logoUrl',
+            logo_size: 'logoSize',
+            instagram_link: 'instagramLink',
+            whatsapp_number: 'whatsappNumber'
         };
 
         for (const key in item) {
@@ -298,14 +298,14 @@ class Database {
             const s = this.data.settings;
             const payload = {
                 id: 'global',
-                sitename: s.siteName,
-                herotitle: s.heroTitle,
-                herosubtitle: s.heroSubtitle,
-                primarycolor: s.primaryColor,
-                logourl: s.logoUrl,
-                logosize: s.logoSize,
-                instagramlink: s.instagramLink,
-                whatsappnumber: s.whatsappNumber
+                site_name: s.siteName,
+                hero_title: s.heroTitle,
+                hero_subtitle: s.heroSubtitle,
+                primary_color: s.primaryColor,
+                logo_url: s.logoUrl,
+                logo_size: s.logoSize,
+                instagram_link: s.instagramLink,
+                whatsapp_number: s.whatsappNumber
             };
             await this.supabase.from('settings').upsert(payload);
         }
@@ -394,8 +394,8 @@ class Database {
             description: product.description,
             price: product.price,
             image: product.image,
-            categoryid: product.categoryId,
-            paymentlink: product.paymentLink,
+            category_id: product.categoryId,
+            payment_link: product.paymentLink,
             user_id: user ? String(user.id) : 'admin'
         };
 
@@ -434,8 +434,8 @@ class Database {
                 description: product.description,
                 price: product.price,
                 image: product.image,
-                categoryid: product.categoryId,
-                paymentlink: product.paymentLink,
+                category_id: product.categoryId,
+                payment_link: product.paymentLink,
                 user_id: user ? String(user.id) : 'admin'
             };
             const { error } = await this.supabase.from('products').update(payload).eq('id', this.parseId(id));
@@ -476,8 +476,8 @@ class Database {
     async addOffer(offer) {
         if (this.supabase) {
             const payload = {
-                productid: offer.productId || offer.productid,
-                promoprice: offer.promoPrice || offer.promoprice
+                product_id: offer.productId || offer.productid || offer.product_id,
+                promo_price: offer.promoPrice || offer.promoprice || offer.promo_price
             };
             const { error } = await this.supabase.from('offers').insert([payload]);
             if (error) throw error;
