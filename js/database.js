@@ -5,7 +5,7 @@
  */
 
 const SUPABASE_URL = 'https://igxpvovlxixfcwyfxhyd.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_oRQ8ZZRO9GRDMTl1XYJWEg_khn-50eY';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlneHB2b3ZseGl4ZmN3eWZ4aHlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTc5MDksImV4cCI6MjA4ODczMzkwOX0.cwRQw38iMrzUMtKzRMVcFbSGGRpfKMn__EbVucT0JxQ';
 
 const DB_KEY = 'ph_store_global_db_v3';
 
