@@ -5,7 +5,7 @@
  */
 
 const SUPABASE_URL = 'https://igxpvovlxixfcwyfxhyd.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlneHB2b3ZseGl4ZmN3eWZ4aHlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTc5MDksImV4cCI6MjA4ODczMzkwOX0.cwRQw38iMrzUMtKzRMVcFbSGGRpfKMn__EbVucT0JxQ';
+const SUPABASE_KEY = 'sb_publishable_oRQ8ZZRO9GRDMTl1XYJWEg_khn-50eY';
 
 const DB_KEY = 'ph_store_global_db_v3';
 
@@ -74,7 +74,7 @@ class Database {
     }
 
     async migrateLocalToSupabase() {
-        if (localStorage.getItem('ph_migration_v4_success')) return;
+        if (localStorage.getItem('ph_migration_v5_success')) return;
 
         if (this.data.products.length === 0) {
             try {
@@ -119,7 +119,7 @@ class Database {
                             await this.supabase.from('settings').upsert(payload);
                         }
 
-                        localStorage.setItem('ph_migration_v4_success', 'true');
+                        localStorage.setItem('ph_migration_v5_success', 'true');
                         console.log("[DB] Migração concluída com sucesso.");
                         await this.fetchAll();
                     }
